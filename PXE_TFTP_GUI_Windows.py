@@ -377,4 +377,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# workflow smoke test 2026-09-17 (retry #3, after ~6h wait)
+# workflow smoke test 2026-09-17 (retry #4, after upgrading to Tier 1)
