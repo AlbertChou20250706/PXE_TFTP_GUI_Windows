@@ -33,12 +33,17 @@ jobs:
           INSTRUCTION='你是資深 Python / Windows 桌面應用審查者，這個專案即將用 Nuitka/PyInstaller 打包上架 Microsoft Store。請針對以下 git diff 做 code review，特別注意：1) 是否又寫死相對路徑/假設 CWD 2) 打包後才會爆的問題 3) 一般正確性與邊界情況。用繁體中文條列回覆，每項標明檔案:行號、問題、建議修法；沒問題就明講沒問題。'
           FULL_PROMPT=$(printf '%s\n\n```diff\n%s\n```' "$INSTRUCTION" "$(cat /tmp/diff.txt)")
           PROMPT_JSON=$(jq -n --arg text "$FULL_PROMPT" '{contents:[{parts:[{text:$text}]}]}')
-          curl -sS -X POST \
+          HTTP_CODE=$(curl -sS -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "$PROMPT_JSON" \
-            -o /tmp/gemini_response.json
-          jq -r '.candidates[0].content.parts[0].text // "（Gemini 沒有回傳有效內容）"' /tmp/gemini_response.json > /tmp/review.txt
+            -o /tmp/gemini_response.json \
+            -w '%{http_code}')
+          echo "Gemini API HTTP status: $HTTP_CODE"
+          echo "--- raw response (key redacted, safe to show) ---"
+          sed "s/${GEMINI_API_KEY}/***REDACTED***/g" /tmp/gemini_response.json
+          echo "--------------------------------------------------"
+          jq -r --arg code "$HTTP_CODE" '.candidates[0].content.parts[0].text // "（Gemini 沒有回傳有效內容，HTTP狀態碼：\($code)）"' /tmp/gemini_response.json > /tmp/review.txt
 
       - name: Post commit comment
         if: env.SKIP != 'true'
