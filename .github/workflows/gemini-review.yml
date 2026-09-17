@@ -30,14 +30,13 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          DIFF_CONTENT=$(cat /tmp/diff.txt)
-          PROMPT=$(jq -n --arg diff "$DIFF_CONTENT" '
-            "你是資深 Python / Windows 桌面應用審查者，這個專案即將用 Nuitka/PyInstaller 打包上架 Microsoft Store。請針對以下 git diff 做 code review，特別注意：1) 是否又寫死相對路徑/假設 CWD 2) 打包後才會爆的問題 3) 一般正確性與邊界情況。用繁體中文條列回覆，每項標明檔案:行號、問題、建議修法；沒問題就明講沒問題。\n\n```diff\n" + $diff + "\n```"
-          ')
+          INSTRUCTION='你是資深 Python / Windows 桌面應用審查者，這個專案即將用 Nuitka/PyInstaller 打包上架 Microsoft Store。請針對以下 git diff 做 code review，特別注意：1) 是否又寫死相對路徑/假設 CWD 2) 打包後才會爆的問題 3) 一般正確性與邊界情況。用繁體中文條列回覆，每項標明檔案:行號、問題、建議修法；沒問題就明講沒問題。'
+          FULL_PROMPT=$(printf '%s\n\n```diff\n%s\n```' "$INSTRUCTION" "$(cat /tmp/diff.txt)")
+          PROMPT_JSON=$(jq -n --arg text "$FULL_PROMPT" '{contents:[{parts:[{text:$text}]}]}')
           curl -sS -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "{\"contents\":[{\"parts\":[{\"text\": ${PROMPT}}]}]}" \
+            -d "$PROMPT_JSON" \
             -o /tmp/gemini_response.json
           jq -r '.candidates[0].content.parts[0].text // "（Gemini 沒有回傳有效內容）"' /tmp/gemini_response.json > /tmp/review.txt
 
@@ -46,9 +45,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BODY=$(jq -n --arg body "🤖 **Gemini Code Review**（自動產生，僅供參考，不會自動套用）
-
-$(cat /tmp/review.txt)" '{body: $body}')
+          HEADER='🤖 Gemini Code Review（自動產生，僅供參考，不會自動套用）'
+          FULL_BODY=$(printf '%s\n\n%s' "$HEADER" "$(cat /tmp/review.txt)")
+          BODY=$(jq -n --arg body "$FULL_BODY" '{body:$body}')
           curl -sS -X POST \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
