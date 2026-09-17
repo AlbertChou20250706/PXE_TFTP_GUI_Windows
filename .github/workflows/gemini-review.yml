@@ -1,0 +1,56 @@
+name: Gemini Code Review (comment-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+
+permissions:
+  contents: write   # 貼 commit comment 需要這個權限
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Build diff
+        run: |
+          git diff HEAD^ HEAD -- '*.py' > /tmp/diff.txt
+          if [ ! -s /tmp/diff.txt ]; then
+            echo "SKIP=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Call Gemini API
+        if: env.SKIP != 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          DIFF_CONTENT=$(cat /tmp/diff.txt)
+          PROMPT=$(jq -n --arg diff "$DIFF_CONTENT" '
+            "你是資深 Python / Windows 桌面應用審查者，這個專案即將用 Nuitka/PyInstaller 打包上架 Microsoft Store。請針對以下 git diff 做 code review，特別注意：1) 是否又寫死相對路徑/假設 CWD 2) 打包後才會爆的問題 3) 一般正確性與邊界情況。用繁體中文條列回覆，每項標明檔案:行號、問題、建議修法；沒問題就明講沒問題。\n\n```diff\n" + $diff + "\n```"
+          ')
+          curl -sS -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"contents\":[{\"parts\":[{\"text\": ${PROMPT}}]}]}" \
+            -o /tmp/gemini_response.json
+          jq -r '.candidates[0].content.parts[0].text // "（Gemini 沒有回傳有效內容）"' /tmp/gemini_response.json > /tmp/review.txt
+
+      - name: Post commit comment
+        if: env.SKIP != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(jq -n --arg body "🤖 **Gemini Code Review**（自動產生，僅供參考，不會自動套用）
+
+$(cat /tmp/review.txt)" '{body: $body}')
+          curl -sS -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -d "$BODY"
