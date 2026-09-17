@@ -377,4 +377,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# workflow smoke test 2026-09-17: no functional change, verifying gemini-review.yml trigger
+# workflow smoke test 2026-09-17 (retry after yaml fix): no functional change
