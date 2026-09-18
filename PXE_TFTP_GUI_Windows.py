@@ -35,8 +35,14 @@ LVL_COLORS = {
 def ts():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+def app_data_dir():
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "PXE_TFTP_GUI_Albert")
+    os.makedirs(d, exist_ok=True)
+    return d
+
 def make_run_dir():
-    base = os.path.join(os.getcwd(), "Logs")
+    base = os.path.join(app_data_dir(), "Logs")
     os.makedirs(base, exist_ok=True)
     run = os.path.join(base, "PXE_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
     os.makedirs(run, exist_ok=True)
@@ -213,7 +219,7 @@ class App(tk.Tk):
         self.resizable(True, True)
 
         self.nic_var = tk.StringVar(value="")
-        self.root_var = tk.StringVar(value=os.path.abspath("TFTP-Root"))
+        self.root_var = tk.StringVar(value=os.path.join(app_data_dir(), "TFTP-Root"))
         self.boot_var = tk.StringVar(value="bootx64.efi")
         self.status_var = tk.StringVar(value="Idle")
         self.server = None
@@ -376,5 +382,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# workflow smoke test 2026-09-17 (retry #4, after upgrading to Tier 1)
