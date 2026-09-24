@@ -338,7 +338,13 @@ class App(tk.Tk):
         root = html.escape(self.root_var.get().strip())
         boot = html.escape(self.boot_var.get().strip())
         run_dir_esc = html.escape(self.run_dir)
-        log_content = open(txt_path, 'r', encoding='utf-8').read() if os.path.exists(txt_path) else '(no log yet)'
+        log_content = '(no log yet)'
+        if os.path.exists(txt_path):
+            try:
+                with open(txt_path, 'r', encoding='utf-8') as f:
+                    log_content = f.read()
+            except OSError as e:
+                log_content = f'(log file busy or unreadable: {e})'
         log_content = html.escape(log_content)
         with open(html_path, "w", encoding="utf-8") as h:
             h.write(f"""<!doctype html><meta charset="utf-8">
