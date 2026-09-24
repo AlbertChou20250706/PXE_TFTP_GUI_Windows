@@ -20,7 +20,7 @@
 ===============================================================================
 """
 
-import os, sys, socket, threading, time, datetime, queue, tkinter as tk
+import os, sys, socket, threading, time, datetime, queue, html, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 # ========= Albert Color Tags (GUI log) =======================================
@@ -334,9 +334,12 @@ class App(tk.Tk):
         # build minimal HTML summary
         txt_path = os.path.join(self.run_dir, "PXE_Log.txt")
         html_path = os.path.join(self.run_dir, "PXE_Overview.html")
-        ip = self.nic_var.get().strip()
-        root = self.root_var.get().strip()
-        boot = self.boot_var.get().strip()
+        ip = html.escape(self.nic_var.get().strip())
+        root = html.escape(self.root_var.get().strip())
+        boot = html.escape(self.boot_var.get().strip())
+        run_dir_esc = html.escape(self.run_dir)
+        log_content = open(txt_path, 'r', encoding='utf-8').read() if os.path.exists(txt_path) else '(no log yet)'
+        log_content = html.escape(log_content)
         with open(html_path, "w", encoding="utf-8") as h:
             h.write(f"""<!doctype html><meta charset="utf-8">
 <title>PXE Overview — Albert</title>
@@ -353,10 +356,10 @@ pre{{background:#0b1020;color:#e5e7eb;padding:12px;border-radius:12px;white-spac
 <tr><td class="k">Server IP</td><td><span class="badge">{ip}</span></td></tr>
 <tr><td class="k">TFTP Root</td><td>{root}</td></tr>
 <tr><td class="k">Bootfile (Opt67)</td><td>{boot}</td></tr>
-<tr><td class="k">Run Dir</td><td>{self.run_dir}</td></tr>
+<tr><td class="k">Run Dir</td><td>{run_dir_esc}</td></tr>
 </table>
 <h3>Recent Log</h3>
-<pre>{open(txt_path,'r',encoding='utf-8').read() if os.path.exists(txt_path) else '(no log yet)'}</pre>
+<pre>{log_content}</pre>
 </div>""")
         self._log("PASS", f"Exported TXT/HTML to {self.run_dir}")
         os.startfile(self.run_dir)
