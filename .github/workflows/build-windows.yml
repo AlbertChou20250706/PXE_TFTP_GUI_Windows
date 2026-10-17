@@ -1,0 +1,59 @@
+name: Build Windows EXE (PyInstaller)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build windowed EXE (matches README step 10)
+        run: pyinstaller -F -w PXE_TFTP_GUI_Windows.py
+
+      - name: Report EXE info
+        run: Get-Item dist\PXE_TFTP_GUI_Windows.exe | Select-Object Name, Length, LastWriteTime
+
+      - name: Smoke test - launch and confirm no immediate crash
+        run: |
+          $proc = Start-Process -FilePath "dist\PXE_TFTP_GUI_Windows.exe" -PassThru
+          Start-Sleep -Seconds 5
+          $stillRunning = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if ($stillRunning) {
+            Write-Host "PASS: process still running after 5s (pid $($proc.Id))"
+            Stop-Process -Id $proc.Id -Force
+          } else {
+            Write-Host "FAIL: process exited within 5s of launch"
+            exit 1
+          }
+
+      - name: Diagnostic console build (only runs if smoke test failed)
+        if: failure()
+        run: pyinstaller -F PXE_TFTP_GUI_Windows.py
+
+      - name: Diagnostic run with console output (only if smoke test failed)
+        if: failure()
+        run: |
+          & "dist\PXE_TFTP_GUI_Windows.exe" 2>&1 | Out-String -Width 4096
+        continue-on-error: true
+
+      - name: Upload EXE artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PXE_TFTP_GUI_Windows-exe
+          path: dist/PXE_TFTP_GUI_Windows.exe
+          retention-days: 14
