@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="AlbertChou.PXE_TFTP_GUI"
+    Publisher="CN=AlbertChou"
+    Version="1.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>PXE TFTP GUI</DisplayName>
+    <PublisherDisplayName>Albert Chou</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="zh-TW" />
+  </Resources>
+
+  <Applications>
+    <Application Id="PXETFTPGUI" Executable="PXE_TFTP_GUI_Windows.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="PXE TFTP GUI"
+        Description="PXE/TFTP boot server GUI — Albert Style"
+        BackgroundColor="#1E3C72"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+
+  <!--
+    rescap:runFullTrust — 必要：這是 Desktop Bridge (Win32-in-MSIX) 應用，非 UWP 沙盒應用。
+    privateNetworkClientServer — 必要：本程式在私人網路上監聽 UDP/69 並接受 TFTP client 連線
+    （見 PXE_TFTP_GUI_Windows.py 的 TFTPServer.run()），MSIX AppContainer 網路規則下
+    若未宣告此能力，client/server 雙向連線會被封鎖，這正是 WARN-02 要修正的項目。
+  -->
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <Capability Name="privateNetworkClientServer" />
+  </Capabilities>
+</Package>

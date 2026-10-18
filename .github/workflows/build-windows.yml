@@ -125,3 +125,109 @@ jobs:
           name: PXE_TFTP_GUI_Windows-nuitka-exe
           path: dist_nuitka/PXE_TFTP_GUI_Windows.exe
           retention-days: 14
+
+  build-msix:
+    needs: build-nuitka
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Nuitka EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: PXE_TFTP_GUI_Windows-nuitka-exe
+          path: msix_stage
+
+      - name: Copy manifest
+        shell: pwsh
+        run: Copy-Item packaging\msix\AppxManifest.xml msix_stage\AppxManifest.xml
+
+      - name: Generate placeholder app icons (Assets)
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          function New-SolidPng($path, $size, $r, $g, $b) {
+            $bmp = New-Object System.Drawing.Bitmap $size, $size
+            $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+            $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, $r, $g, $b))
+            $gfx.FillRectangle($brush, 0, 0, $size, $size)
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $gfx.Dispose(); $bmp.Dispose()
+          }
+          New-Item -ItemType Directory -Force -Path msix_stage\Assets | Out-Null
+          New-SolidPng "msix_stage\Assets\Square44x44Logo.png" 44 30 60 114
+          New-SolidPng "msix_stage\Assets\Square150x150Logo.png" 150 30 60 114
+          New-SolidPng "msix_stage\Assets\StoreLogo.png" 50 30 60 114
+
+      - name: Locate Windows SDK tools (makeappx, signtool)
+        id: sdktools
+        shell: pwsh
+        run: |
+          $makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" -ErrorAction Stop |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction Stop |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          Write-Host "makeappx: $($makeappx.FullName)"
+          Write-Host "signtool: $($signtool.FullName)"
+          "makeappx=$($makeappx.FullName)" >> $env:GITHUB_OUTPUT
+          "signtool=$($signtool.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Pack MSIX
+        shell: pwsh
+        run: |
+          & "${{ steps.sdktools.outputs.makeappx }}" pack /d msix_stage /p PXE_TFTP_GUI_Windows.msix /o
+          if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed with exit code $LASTEXITCODE" }
+
+      - name: Create self-signed test certificate and sign MSIX
+        shell: pwsh
+        run: |
+          $pwdText = "Phase2TestCert!"
+          $securePwd = ConvertTo-SecureString -String $pwdText -Force -AsPlainText
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=AlbertChou" `
+            -KeyUsage DigitalSignature -FriendlyName "PXE TFTP GUI Phase2 Test Cert" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          Export-PfxCertificate -Cert $cert -FilePath testcert.pfx -Password $securePwd | Out-Null
+          Import-PfxCertificate -FilePath testcert.pfx -CertStoreLocation Cert:\LocalMachine\TrustedPeople -Password $securePwd | Out-Null
+          & "${{ steps.sdktools.outputs.signtool }}" sign /fd SHA256 /a /f testcert.pfx /p $pwdText PXE_TFTP_GUI_Windows.msix
+          if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+
+      - name: Install MSIX package
+        shell: pwsh
+        run: |
+          Add-AppxPackage -Path PXE_TFTP_GUI_Windows.msix
+          $pkg = Get-AppxPackage -Name "AlbertChou.PXE_TFTP_GUI"
+          if (-not $pkg) { throw "Package did not install" }
+          Write-Host "Installed at: $($pkg.InstallLocation)"
+          "install_location=$($pkg.InstallLocation)" >> $env:GITHUB_OUTPUT
+        id: install
+
+      - name: Smoke test - launch installed MSIX app, confirm no immediate crash
+        shell: pwsh
+        run: |
+          $exePath = Join-Path "${{ steps.install.outputs.install_location }}" "PXE_TFTP_GUI_Windows.exe"
+          Write-Host "Launching: $exePath"
+          $proc = Start-Process -FilePath $exePath -PassThru
+          Start-Sleep -Seconds 5
+          $stillRunning = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if ($stillRunning) {
+            Write-Host "PASS: MSIX-installed app still running after 5s (pid $($proc.Id))"
+            Stop-Process -Id $proc.Id -Force
+          } else {
+            Write-Host "FAIL: MSIX-installed app exited within 5s of launch"
+            exit 1
+          }
+
+      - name: Uninstall MSIX package (cleanup)
+        if: always()
+        shell: pwsh
+        run: Remove-AppxPackage -Package (Get-AppxPackage -Name "AlbertChou.PXE_TFTP_GUI").PackageFullName -ErrorAction SilentlyContinue
+
+      - name: Upload MSIX artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PXE_TFTP_GUI_Windows-msix
+          path: PXE_TFTP_GUI_Windows.msix
+          retention-days: 14
