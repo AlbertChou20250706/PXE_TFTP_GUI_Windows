@@ -6,7 +6,7 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="AlbertChou.PXE_TFTP_GUI"
+    Name="AlbertChou.PXE-TFTP-GUI"
     Publisher="CN=AlbertChou"
     Version="1.0.0.0"
     ProcessorArchitecture="x64" />
